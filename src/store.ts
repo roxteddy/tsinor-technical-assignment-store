@@ -13,14 +13,15 @@ export interface IStore {
 }
 
 export function Restrict(rights?: any): any {
-  let currentValue: any;
-
   return (target: any, key: string) => {
+    let currentValue: any;
 
     Object.defineProperty(target, key, {
       set: function (newValue: any) {
         if (!this.isInit || ['rw', 'w'].includes(rights || this.defaultPolicy)) {
+          if (newValue !== Store.DUMMY_VALUE) {
             currentValue = newValue;
+          }
         } else {
           throw new Error(`No write access for ${key}`);
         }
@@ -40,12 +41,27 @@ export class Store implements IStore {
 
   @Restrict()
   private data: JSONObject = {};
+
+  /*
+  ** TODO: I don't think this is the right way
+  ** isInit is needed to be able to assign restricted properties during class construction.
+  ** We then assign it to true in each method so the restrictions are effective.
+  ** I could not find another solution since I was not able to determine if the decorator getter/setter
+  ** were called from a constructor.
+  */
   private isInit = false;
+
+  /*
+  ** TODO: find a better way of testing write access ?
+  ** DUMMY_VALUE is used to test the write access without really changing the value.
+  ** We can't assign the value to itself because we don't necessarily have the read access.
+  */
+  static DUMMY_VALUE = Symbol('dummy');
 
   allowedToRead(key: string): boolean {
     this.isInit = true;
     try {
-      Reflect.get(this, key) || this.data;
+      (Reflect.has(this, key) && Reflect.get(this, key)) || this.data;
       return true;
     } catch (e) {
       return false;
@@ -55,8 +71,8 @@ export class Store implements IStore {
   allowedToWrite(key: string): boolean {
     this.isInit = true;
     try {
-      (Reflect.has(this, key) && Reflect.set(this, key, null))
-          ||Reflect.set(this, 'data', null);
+      (Reflect.has(this, key) && Reflect.set(this, key, Store.DUMMY_VALUE))
+          ||Reflect.set(this, 'data', Store.DUMMY_VALUE);
       return true;
     } catch (e) {
       return false;
@@ -67,7 +83,7 @@ export class Store implements IStore {
     this.isInit = true;
     const pathNodes = path.split(':');
     if (!pathNodes.length) {
-      throw new Error("Path needed");
+      throw new Error("Wrong path");
     }
     let currentNode: any;
     if (Reflect.has(this, pathNodes[0])) {
@@ -131,11 +147,17 @@ export class Store implements IStore {
     return this;
   }
 
+  /*
+  ** TODO
+  ** Those two next are unused and undocumented so the implementation is very minimal
+  ** writeEntries could also use Object.assign() to merge with existing data
+  ** should entries return class properties as well ? It seems a bit tricky to get with inheritance
+  */
   writeEntries(entries: JSONObject): void {
-    throw new Error("Undocumented");
+    this.data = entries;
   }
 
   entries(): JSONObject {
-    throw new Error("Undocumented");
+    return this.data;
   }
 }
